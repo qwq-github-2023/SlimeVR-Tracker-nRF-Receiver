@@ -26,3 +26,6 @@
 
 uint8_t stored_trackers = 0;
 uint64_t stored_tracker_addr[MAX_TRACKERS] = {0};
+
+uint8_t qwritedown_data[256] = {0};
+uint8_t qwritedown_size = 0;

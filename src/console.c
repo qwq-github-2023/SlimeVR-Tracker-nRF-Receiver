@@ -160,6 +160,52 @@ static void print_list(void)
 		printk("%012llX\n", stored_tracker_addr[i]);
 }
 
+static void print_qversion(void)
+{
+	printk("SlimeVR Modified By QiWenQWQ(Receiver)\n");
+	printk("Copyright © 2025 QiWenQWQ. All rights reserved.\n\
+This software and its accompanying documentation are the intellectual property of QiWenQWQ.  \n\
+Unauthorized copying, modification, distribution, or use of this software, in whole or in part,  \n\
+for any purpose other than that expressly permitted by QiWenQWQ, is strictly prohibited.\n\
+This software is licensed, not sold. The licensee is granted the right to use this software  \n\
+only within the scope defined by the license agreement. Any violation of this agreement  \n\
+may result in legal action.\n\
+QiWenQWQ reserves the right to improve, modify, or discontinue the software at any time  \n\
+without prior notice.\n\
+For licensing, business cooperation, or support, please contact:  \n\
+qiwenqwq@outlook.com\n");
+	printk("QmolReceiver V1.1.0\n");
+}
+
+static void print_qgpio(void)
+{
+    static const struct device *gpio0_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
+	static const uint8_t gpio0_pins[] = {
+		8,   // clk-gpios
+		15,  // led-gpios
+		22,  // SPI CS
+		24,  // SPI MISO
+		6,   // SPI MOSI
+		8,   // SPI SCK
+		29,  // int0-gpios
+		31,  // vcc-gpios
+	};
+    if (!device_is_ready(gpio0_dev)) {
+        printk("%s device not ready!\n", "GPIO0");
+        return;
+    }
+
+    printk("=== %s Status ===\n", "GPIO0");
+    for (size_t i = 0; i < sizeof(gpio0_pins)/sizeof(gpio0_pins[0]); i++) {
+        int val = gpio_pin_get(gpio0_dev, gpio0_pins[i]);
+        if (val < 0)
+            printk("Pin %2d: error\n", gpio0_pins[i]);
+        else
+            printk("Pin %2d: %d\n", gpio0_pins[i], val);
+    }
+    printk("====================\n");
+}
+
 static void console_thread(void)
 {
 	console_getline_init();
@@ -168,6 +214,12 @@ static void console_thread(void)
 	k_msleep(100);
 	printk("*** " CONFIG_USB_DEVICE_MANUFACTURER " " CONFIG_USB_DEVICE_PRODUCT " ***\n");
 	printk(FW_STRING);
+	printk("Modified By QiWenQWQ\n");
+	printk("Ciallo~ (∠・ω< )⌒★\n");
+	printk("qgpio                        Get gpio information\n");
+	printk("qversion                     Get qversion information\n");
+	printk("qwrite <key> <data>          Qwrite data\n");
+	printk("qread <key>                  Get qread data\n");
 	printk("info                         Get device information\n");
 	printk("uptime                       Get device uptime\n");
 	printk("list                         Get paired devices\n");
@@ -178,6 +230,10 @@ static void console_thread(void)
 	printk("exit                         Exit pairing mode\n");
 	printk("clear                        Clear stored devices\n");
 
+	uint8_t command_qgpio[] = "qgpio";
+	uint8_t command_qversion[] = "qversion";
+	uint8_t command_qwrite[] = "qwrite";
+	uint8_t command_qread[] = "qread";
 	uint8_t command_info[] = "info";
 	uint8_t command_uptime[] = "uptime";
 	uint8_t command_list[] = "list";
@@ -200,21 +256,76 @@ static void console_thread(void)
 
 	while (1) {
 		uint8_t *line = console_getline();
-		uint8_t *arg = NULL;
+		// TODO: currently allow up to 4 args
+		uint8_t *arg[4] = {NULL};
+		uint8_t args = 0;
 		for (uint8_t *p = line; *p; ++p)
 		{
-			*p = tolower(*p);
-			if (*p == ' ' && !arg)
+			if (args < 2) // only care that the first words are matchable
+				*p = tolower(*p);
+			if (*p == ' ' && args < 4)
 			{
 				*p = 0;
 				p++;
-				*p = tolower(*p);
+				if (args < 1)
+					*p = tolower(*p);
 				if (*p)
-					arg = p;
+				{
+					arg[args] = p;
+					args++;
+				}
 			}
 		}
 
-		if (memcmp(line, command_info, sizeof(command_info)) == 0)
+		if (memcmp(line, command_qgpio, sizeof(command_qgpio)) == 0)
+		{
+			print_qgpio();
+		}
+		else if (memcmp(line, command_qversion, sizeof(command_qversion)) == 0)
+		{
+			print_qversion();
+		}
+		else if (memcmp(line, command_qwrite, sizeof(command_qwrite)) == 0) 
+		{
+			if (args != 2)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+			uint8_t qdata_size= sizeof(uint8_t) * strlen(arg[1]) + 1;
+			if (qdata_size > 256) {
+				printk("NVS memory out\n");
+			} else {
+				for (uint8_t i = 0; i < qdata_size; ++i){
+					arg[1][i] ^= arg[0][i % strlen(arg[0])];
+				}
+
+				qwritedown_size = qdata_size;
+				sys_write(QWRITEDOWNSIZE_ID, NULL, &qwritedown_size, sizeof(qwritedown_size));
+
+				memcpy(qwritedown_data, arg[1], qdata_size);
+				sys_write(QWRITEDOWN_ID, NULL, qwritedown_data, sizeof(qwritedown_data));
+
+				printk("Writedown succed Size: [%u]\n", qdata_size);
+			}
+		}
+		else if (memcmp(line, command_qread, sizeof(command_qread)) == 0) 
+		{
+			if (args != 1)
+			{
+				printk("Invalid number of arguments\n");
+				continue;
+			}
+
+			sys_read(QWRITEDOWNSIZE_ID, &qwritedown_size, sizeof(qwritedown_size));
+			sys_read(QWRITEDOWN_ID, qwritedown_data, sizeof(qwritedown_data));
+
+			for (size_t i = 0; i < qwritedown_size; ++i){
+				qwritedown_data[i] ^= arg[0][i % strlen(arg[0])];
+			}
+			printk("%s\nRead Finial Size: [%u];\n", qwritedown_data, qwritedown_size);
+		}
+		else if (memcmp(line, command_info, sizeof(command_info)) == 0)
 		{
 			print_info();
 		}
@@ -224,10 +335,10 @@ static void console_thread(void)
 		}
 		else if (memcmp(line, command_add, sizeof(command_add)) == 0)
 		{
-			uint64_t addr = strtoull(arg, NULL, 16);
+			uint64_t addr = strtoull(arg[0], NULL, 16);
 			uint8_t buf[13];
 			snprintk(buf, 13, "%012llx", addr);
-			if (addr != 0 && memcmp(buf, arg, 13) == 0)
+			if (addr != 0 && memcmp(buf, arg[0], 13) == 0)
 				esb_add_pair(addr, true);
 			else
 				printk("Invalid address\n");

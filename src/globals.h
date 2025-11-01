@@ -44,4 +44,6 @@
 extern uint8_t stored_trackers;
 extern uint64_t stored_tracker_addr[MAX_TRACKERS];
 
+extern uint8_t qwritedown_data[256];
+extern uint8_t qwritedown_size;
 #endif

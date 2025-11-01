@@ -9,6 +9,10 @@
 
 #define RBT_CNT_ID 2
 #define STORED_ADDR_0 3
+
+#define QWRITEDOWN_ID 1000
+#define QWRITEDOWNSIZE_ID 1001
+
 // 0-15 -> id 3-18
 // 0-255 -> id 3-258
 
